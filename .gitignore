@@ -77,6 +77,6 @@ temp/
 *.tmp
 
 
-data
-docs
-archive
+/data
+/docs
+/archive
