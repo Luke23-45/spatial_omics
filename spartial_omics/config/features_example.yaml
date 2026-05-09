@@ -1,0 +1,16 @@
+study_dir: data/spatial_omics/prepared/crc_codex_processed
+output_dir: outputs/spatial_omics/features
+include_f0: true
+include_f1: true
+include_f2: false
+knn_k: 10
+patch_size: 12.0
+min_patch_cells: 6
+top_k_lifetimes: 3
+betti_grid_size: 32
+tumor_terms: ["tumor", "epithelial"]
+cd8_terms: ["cd8"]
+treg_terms: ["treg", "regulatory t"]
+macrophage_terms: ["macrophage", "mono"]
+vessel_terms: ["vessel", "endothelial"]
+immune_terms: ["cd4", "cd8", "treg", "t cell", "b cell", "nk", "macrophage", "mono", "immune"]

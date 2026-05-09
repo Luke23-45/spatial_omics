@@ -1,0 +1,4 @@
+input_dir: data/spatial_omics/raw/crc_codex_processed
+output_dir: data/spatial_omics/prepared/crc_codex_processed
+dataset_name: crc_codex_processed
+label_column: label

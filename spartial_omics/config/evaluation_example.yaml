@@ -1,0 +1,6 @@
+features_path: outputs/spatial_omics/features/feature_table.csv
+output_dir: outputs/spatial_omics/evaluation
+random_state: 42
+n_splits: 4
+n_repeats: 2
+top_feature_k: 10

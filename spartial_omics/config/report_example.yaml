@@ -1,0 +1,4 @@
+results_json: outputs/spatial_omics/evaluation/feasibility_results.json
+output_dir: outputs/spatial_omics/report
+study_dir: data/spatial_omics/prepared/crc_codex_processed
+features_path: outputs/spatial_omics/features/feature_table.csv
