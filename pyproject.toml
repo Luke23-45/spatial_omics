@@ -48,9 +48,6 @@ dev = [
 
 ml = [
     "torch>=1.10.0",
-    "tensorflow>=2.8.0",
-    "xgboost>=1.5.0",
-    "lightgbm>=3.3.0",
 ]
 
 visualization = [
