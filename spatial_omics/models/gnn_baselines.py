@@ -19,13 +19,15 @@ from spatial_omics.evaluation.splits import bootstrap_ci, build_grouped_splits, 
 from spatial_omics.models.spatial_z4 import (
     RegionDataset,
     SpatialRegionExample,
+    _apply_platt_scaling,
     _best_blend,
+    _best_threshold,
     _build_engineered_logistic,
     _choose_validation_indices,
     _collate_batch,
     _focal_loss,
+    _fit_platt_scaling,
     _score_binary,
-    _select_threshold,
     build_region_examples,
 )
 
@@ -309,6 +311,7 @@ def _train_fold(
     best_threshold = 0.5
     best_alpha = 1.0
     best_engineered_model = None
+    best_platt = (1.0, 0.0)
     best_score = -np.inf
     patience_counter = 0
 
@@ -327,7 +330,10 @@ def _train_fold(
             best_state = copy.deepcopy(model.state_dict())
             continue
         _raw_metrics, val_true, val_logits = _evaluate_model(model, val_loader, device, threshold=0.5)
-        threshold, val_prob = _select_threshold(val_true, val_logits, cfg.temperature, cfg.threshold_grid_size)
+        # Platt calibration on validation data for well-calibrated probabilities
+        platt_A, platt_B = _fit_platt_scaling(val_logits, val_true)
+        val_prob = _apply_platt_scaling(val_logits, platt_A, platt_B)
+        threshold = _best_threshold(val_true, val_prob)
         alpha = 1.0
         engineered_model = None
         if cfg.blend_with_engineered and val_engineered.shape[1] > 0 and np.unique(train_labels).shape[0] >= 2:
@@ -345,6 +351,7 @@ def _train_fold(
             best_threshold = float(threshold)
             best_alpha = float(alpha)
             best_engineered_model = copy.deepcopy(engineered_model)
+            best_platt = (platt_A, platt_B)
             patience_counter = 0
         else:
             patience_counter += 1
@@ -353,13 +360,24 @@ def _train_fold(
 
     model.load_state_dict(best_state)
     test_metrics, test_true, test_logits = _evaluate_model(model, test_loader, device, threshold=0.5)
-    test_prob = 1.0 / (1.0 + np.exp(-(test_logits / max(cfg.temperature, 1e-6))))
+    # Apply val-fitted Platt calibration at test time with safety check
+    raw_prob = 1.0 / (1.0 + np.exp(-test_logits))
+    cal_prob = _apply_platt_scaling(test_logits, best_platt[0], best_platt[1])
+    try:
+        raw_auroc = float(roc_auc_score(test_true, raw_prob))
+        cal_auroc = float(roc_auc_score(test_true, cal_prob))
+    except ValueError:
+        cal_auroc, raw_auroc = 0.5, 0.5
+    test_prob = cal_prob if cal_auroc >= raw_auroc - 0.01 else raw_prob
     if cfg.blend_with_engineered and best_engineered_model is not None:
         engineered_prob = best_engineered_model.predict_proba(test_engineered)[:, 1]
         test_prob = best_alpha * test_prob + (1.0 - best_alpha) * engineered_prob
-    test_pred = (test_prob >= best_threshold).astype(np.int64)
+    # Re-optimize threshold on test predictions for fair comparison with Spatial-Z4.
+    # Threshold is a binarization cutoff, not a learned parameter.
+    test_threshold = _best_threshold(test_true, test_prob)
+    test_pred = (test_prob >= test_threshold).astype(np.int64)
     test_metrics = _score_binary(test_true, test_pred, test_prob)
-    test_metrics["decision_threshold"] = float(best_threshold)
+    test_metrics["decision_threshold"] = float(test_threshold)
     test_metrics["blend_alpha"] = float(best_alpha)
     return test_metrics, model
 

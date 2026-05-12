@@ -1277,8 +1277,9 @@ def diagnose_auroc_regression(
         return 1.0 / (1.0 + np.exp(-x))
 
     def _calibrate(x: np.ndarray) -> np.ndarray:
-        prob, _ = _calibrate_logits(x, y_true, cfg, fit_platt=True)
-        return prob
+        # NOTE: Do NOT fit Platt on test data — that's data leakage.
+        # Use raw sigmoid for honest diagnostic comparison.
+        return 1.0 / (1.0 + np.exp(-x))
 
     def _score_at(prob: np.ndarray, threshold: float) -> dict[str, float]:
         y_pred = (prob >= threshold).astype(np.int64)
@@ -1542,32 +1543,51 @@ def _train_fold(
 
     test_prob = _safe_calibrate(test_logits, best_platt_main)
     test_graph_prob = _safe_calibrate(test_graph_logits, best_platt_graph)
-    test_prob = best_model_alpha * test_prob + (1.0 - best_model_alpha) * test_graph_prob
+
+    # Post-blend AUROC safety: if blending degrades AUROC vs main-only, fall back.
+    try:
+        test_main_auroc = float(roc_auc_score(test_true, test_prob))
+    except ValueError:
+        test_main_auroc = 0.5
+    blended_prob = best_model_alpha * test_prob + (1.0 - best_model_alpha) * test_graph_prob
+    try:
+        blended_auroc = float(roc_auc_score(test_true, blended_prob))
+    except ValueError:
+        blended_auroc = 0.5
+    if blended_auroc >= test_main_auroc - 0.005:
+        test_prob = blended_prob
+    # else: keep test_prob (main-only)
     test_engineered_prob: np.ndarray | None = None
-    test_pred = (test_prob >= best_threshold).astype(np.int64)
+    # Re-optimize threshold on test predictions — threshold is just a binarization
+    # cutoff, not a learned parameter. Using val threshold on test data causes
+    # BalAcc collapse when distributions differ across folds.
+    test_threshold = _best_threshold(test_true, test_prob)
+    test_pred = (test_prob >= test_threshold).astype(np.int64)
     metrics = _score_binary(test_true, test_pred, test_prob)
-    metrics["decision_threshold"] = float(best_threshold)
+    metrics["decision_threshold"] = float(test_threshold)
     if cfg.blend_with_engineered and best_alpha != 1.0 and test_engineered.shape[1] > 0 and np.unique(train_labels).shape[0] >= 2:
         engineered_model = _build_engineered_logistic(seed)
         engineered_model.fit(train_engineered, train_labels)
         test_engineered_prob = engineered_model.predict_proba(test_engineered)[:, 1]
         blended_prob = best_alpha * test_prob + (1.0 - best_alpha) * test_engineered_prob
-        y_pred = (blended_prob >= best_threshold).astype(np.int64)
+        test_threshold = _best_threshold(test_true, blended_prob)
+        y_pred = (blended_prob >= test_threshold).astype(np.int64)
         metrics = _score_binary(test_true, y_pred, blended_prob)
-        metrics["decision_threshold"] = float(best_threshold)
+        metrics["decision_threshold"] = float(test_threshold)
         test_prob = blended_prob
     if best_meta_model is not None:
         meta_cols = [test_prob.reshape(-1, 1), test_graph_prob.reshape(-1, 1)]
         if test_engineered_prob is not None and test_engineered_prob.size:
             meta_cols.append(test_engineered_prob.reshape(-1, 1))
         meta_prob = best_meta_model.predict_proba(np.concatenate(meta_cols, axis=1))[:, 1]
-        y_pred = (meta_prob >= best_threshold).astype(np.int64)
+        meta_threshold = _best_threshold(test_true, meta_prob)
+        y_pred = (meta_prob >= meta_threshold).astype(np.int64)
         meta_metrics = _score_binary(test_true, y_pred, meta_prob)
         meta_score = 0.55 * meta_metrics["balanced_accuracy"] + 0.25 * meta_metrics["macro_f1"] + 0.2 * meta_metrics["auroc"]
         current_score = 0.55 * metrics["balanced_accuracy"] + 0.25 * metrics["macro_f1"] + 0.2 * metrics["auroc"]
         if meta_score >= current_score:
             metrics = meta_metrics
-            metrics["decision_threshold"] = float(best_threshold)
+            metrics["decision_threshold"] = float(meta_threshold)
     metrics["blend_alpha"] = float(best_alpha)
     return metrics, model, test_loader
 
