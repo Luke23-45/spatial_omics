@@ -2,6 +2,7 @@
 
 ACTIVE_BASELINE_MODEL = "graphsage"
 ACTIVE_TOPOLOGY_MODEL = "spatial_z4_v2"
+EXPERIMENTAL_TOPOLOGY_MODEL = "toponet_hodge"
 
 SUPPORTED_MODELS = {
     ACTIVE_BASELINE_MODEL: {
@@ -14,6 +15,11 @@ SUPPORTED_MODELS = {
         "description": "Retained standalone topology-oriented Spatial-Z4 v2 configuration.",
         "entrypoint": "python -m spatial_omics.scripts.run_spatial_z4",
     },
+    EXPERIMENTAL_TOPOLOGY_MODEL: {
+        "family": "topology",
+        "description": "Fair simplicial Hodge topology benchmark built from node-edge-triangle complexes.",
+        "entrypoint": "python -m spatial_omics.scripts.run_toponet_hodge",
+    },
 }
 
-__all__ = ["ACTIVE_BASELINE_MODEL", "ACTIVE_TOPOLOGY_MODEL", "SUPPORTED_MODELS"]
+__all__ = ["ACTIVE_BASELINE_MODEL", "ACTIVE_TOPOLOGY_MODEL", "EXPERIMENTAL_TOPOLOGY_MODEL", "SUPPORTED_MODELS"]

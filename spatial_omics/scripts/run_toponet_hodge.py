@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import argparse
 
-from spatial_omics.models.gnn_baselines import GNNBaselineConfig, run_gnn_baselines_study, save_gnn_baseline_results
+from spatial_omics.models.toponet_hodge import TopoNetHodgeConfig, run_toponet_hodge_study, save_toponet_hodge_results
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the canonical GraphSAGE grouped-CV baseline on a prepared spatial-omics study.")
+    parser = argparse.ArgumentParser(description="Run the fair simplicial Hodge topology benchmark on a prepared spatial-omics study.")
     parser.add_argument("--study-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--features-path", default=None)
@@ -25,15 +25,13 @@ def main() -> int:
     parser.add_argument("--dropout", type=float, default=0.15)
     parser.add_argument("--focal-gamma", type=float, default=2.0)
     parser.add_argument("--label-smoothing", type=float, default=0.0)
-    parser.add_argument("--temperature", type=float, default=0.5)
     parser.add_argument("--threshold-grid-size", type=int, default=61)
-    parser.add_argument("--blend-with-engineered", action="store_true", dest="blend_with_engineered")
-    parser.add_argument("--no-blend-with-engineered", action="store_false", dest="blend_with_engineered")
-    parser.set_defaults(blend_with_engineered=True)
+    parser.add_argument("--num-layers", type=int, default=2)
+    parser.add_argument("--polynomial-order", type=int, default=2)
     parser.add_argument("--random-state", type=int, default=42)
     args = parser.parse_args()
 
-    cfg = GNNBaselineConfig(
+    cfg = TopoNetHodgeConfig(
         study_dir=args.study_dir,
         output_dir=args.output_dir,
         features_path=args.features_path,
@@ -52,14 +50,13 @@ def main() -> int:
         dropout=args.dropout,
         focal_gamma=args.focal_gamma,
         label_smoothing=args.label_smoothing,
-        temperature=args.temperature,
         threshold_grid_size=args.threshold_grid_size,
-        blend_with_engineered=args.blend_with_engineered,
-        model_names=("graphsage",),
+        num_layers=args.num_layers,
+        polynomial_order=args.polynomial_order,
         random_state=args.random_state,
     )
-    results = run_gnn_baselines_study(cfg)
-    save_gnn_baseline_results(results, cfg.output_dir)
+    results = run_toponet_hodge_study(cfg)
+    save_toponet_hodge_results(results, cfg.output_dir)
     return 0
 
 
