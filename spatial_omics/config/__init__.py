@@ -2,10 +2,11 @@
 
 from spatial_omics.config.loader import load_config
 from spatial_omics.config.types import (
-    EvaluationConfig,
     FeatureConfig,
     PrepareConfig,
     ReportConfig,
+    TopoNetHodgeConfig,
+    GNNBaselineConfig,
 )
 
-__all__ = ["EvaluationConfig", "FeatureConfig", "PrepareConfig", "ReportConfig", "load_config"]
+__all__ = ["FeatureConfig", "PrepareConfig", "ReportConfig", "TopoNetHodgeConfig", "GNNBaselineConfig", "load_config"]

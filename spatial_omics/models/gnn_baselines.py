@@ -32,32 +32,7 @@ from spatial_omics.models.spatial_z4 import (
 )
 
 
-@dataclass
-class GNNBaselineConfig:
-    study_dir: str
-    output_dir: str
-    features_path: str | None = None
-    random_state: int = 42
-    n_splits: int = 4
-    n_repeats: int = 1
-    batch_size: int = 12
-    epochs: int = 12
-    patience: int = 4
-    learning_rate: float = 1e-3
-    weight_decay: float = 5e-5
-    knn_k: int = 6
-    neighborhood_mode: str = "adaptive_knn"
-    model_dim: int = 48
-    type_embedding_dim: int = 16
-    max_cells: int = 160
-    dropout: float = 0.15
-    focal_gamma: float = 2.0
-    label_smoothing: float = 0.0
-    temperature: float = 0.5
-    threshold_grid_size: int = 61
-    blend_with_engineered: bool = True
-    model_names: tuple[str, ...] = ("graphsage",)
-    split_mode: str = "grouped"
+from spatial_omics.config import GNNBaselineConfig
 
 
 def _make_loader(examples: list[SpatialRegionExample], labels: np.ndarray, *, batch_size: int, shuffle: bool) -> DataLoader:

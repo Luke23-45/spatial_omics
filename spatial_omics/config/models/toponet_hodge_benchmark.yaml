@@ -1,6 +1,6 @@
 study_dir: data/spatial_omics/prepared/cellsighter_crc_clinical
-output_dir: outputs/active/graphsage_crc
-features_path: outputs/active/features/feature_table.csv
+output_dir: outputs/active/toponet_hodge_crc
+features_path: null
 n_splits: 4
 n_repeats: 1
 epochs: 12
@@ -16,9 +16,15 @@ max_cells: 160
 dropout: 0.15
 focal_gamma: 2.0
 label_smoothing: 0.0
-temperature: 0.5
 threshold_grid_size: 61
-model_names:
-  - graphsage
-blend_with_engineered: true
+num_layers: 2
+polynomial_order: 2
+restriction_hidden_dim: 32
+use_geometric_weights: false
+use_orthogonal_restrictions: false
+use_morse_gating: false
+global_knn_multiplier: 4
+global_distance_multiplier: 2.5
+global_max_neighbors: 24
+split_mode: grouped
 random_state: 42

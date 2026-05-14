@@ -41,18 +41,6 @@ class FeatureConfig:
 
 
 @dataclass
-class EvaluationConfig:
-    features_path: str
-    output_dir: str
-    random_state: int = 42
-    n_splits: int = 4
-    n_repeats: int = 2
-    top_feature_k: int = 10
-    model_names: list[str] = field(default_factory=list)
-    split_mode: str = "grouped"
-
-
-@dataclass
 class ReportConfig:
     results_json: str
     output_dir: str
@@ -60,4 +48,66 @@ class ReportConfig:
     features_path: str | None = None
 
 
-__all__ = ["EvaluationConfig", "FeatureConfig", "PrepareConfig", "ReportConfig"]
+@dataclass
+class TopoNetHodgeConfig:
+    study_dir: str
+    output_dir: str
+    features_path: str | None = None
+    random_state: int = 42
+    n_splits: int = 4
+    n_repeats: int = 1
+    split_mode: str = "grouped"
+    batch_size: int = 12
+    epochs: int = 12
+    patience: int = 4
+    learning_rate: float = 1e-3
+    weight_decay: float = 5e-5
+    knn_k: int = 6
+    neighborhood_mode: str = "adaptive_knn"
+    model_dim: int = 48
+    type_embedding_dim: int = 16
+    max_cells: int = 160
+    dropout: float = 0.15
+    focal_gamma: float = 2.0
+    label_smoothing: float = 0.0
+    threshold_grid_size: int = 61
+    num_layers: int = 2
+    polynomial_order: int = 2
+    restriction_hidden_dim: int = 32
+    use_geometric_weights: bool = False
+    use_orthogonal_restrictions: bool = False
+    use_morse_gating: bool = False
+    global_knn_multiplier: int = 4
+    global_distance_multiplier: float = 2.5
+    global_max_neighbors: int = 24
+
+
+@dataclass
+class GNNBaselineConfig:
+    study_dir: str
+    output_dir: str
+    features_path: str | None = None
+    random_state: int = 42
+    n_splits: int = 4
+    n_repeats: int = 1
+    batch_size: int = 12
+    epochs: int = 12
+    patience: int = 4
+    learning_rate: float = 1e-3
+    weight_decay: float = 5e-5
+    knn_k: int = 6
+    neighborhood_mode: str = "adaptive_knn"
+    model_dim: int = 48
+    type_embedding_dim: int = 16
+    max_cells: int = 160
+    dropout: float = 0.15
+    focal_gamma: float = 2.0
+    label_smoothing: float = 0.0
+    temperature: float = 0.5
+    threshold_grid_size: int = 61
+    blend_with_engineered: bool = True
+    model_names: tuple[str, ...] = ("graphsage",)
+    split_mode: str = "grouped"
+
+
+__all__ = ["FeatureConfig", "PrepareConfig", "ReportConfig", "TopoNetHodgeConfig", "GNNBaselineConfig"]
