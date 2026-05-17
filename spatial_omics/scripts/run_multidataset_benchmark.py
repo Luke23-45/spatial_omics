@@ -6,7 +6,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from spatial_omics.config import GNNBaselineConfig, MultiDatasetBenchmarkConfig, TopoNetHodgeConfig, load_config
+from spatial_omics.config import (
+    GNNBaselineConfig,
+    MultiDatasetBenchmarkConfig,
+    MultiDatasetStudyConfig,
+    TopoNetHodgeConfig,
+    load_config,
+)
 from spatial_omics.data import (
     create_study_adapter,
     ensure_catalog_source_available,
@@ -179,12 +185,126 @@ def _run_model(model_name: str, cfg: MultiDatasetBenchmarkConfig, study_dir: Pat
     raise ValueError(f"Unsupported model '{model_name}'.")
 
 
+def _config_from_args(args: argparse.Namespace) -> MultiDatasetBenchmarkConfig:
+    if args.config:
+        return load_config(args.config, MultiDatasetBenchmarkConfig)
+
+    if not args.dataset_source and not args.study_dir and not args.input_dir:
+        raise ValueError("Provide either --config or one of --dataset-source / --study-dir / --input-dir.")
+
+    if args.study_dir:
+        adapter = "prepared_study"
+    elif args.adapter:
+        adapter = args.adapter
+    elif args.dataset_source == "keren_tnbc":
+        adapter = "keren_tnbc_h5ad"
+    else:
+        adapter = "processed_cell_table"
+
+    dataset_cfg = MultiDatasetStudyConfig(
+        name=args.dataset_name or args.dataset_source or "dataset",
+        source_id=args.dataset_source,
+        adapter=adapter,
+        dataset_name=args.dataset_name or args.dataset_source,
+        study_dir=args.study_dir,
+        input_dir=args.input_dir,
+        label_column=args.label_column,
+        output_subdir=args.output_subdir,
+        required=True,
+        skip_if_unavailable=False,
+        max_splits_override=args.n_splits,
+    )
+    return MultiDatasetBenchmarkConfig(
+        datasets=[dataset_cfg],
+        output_dir=args.output_dir,
+        materialized_data_root=args.materialized_data_root,
+        auto_download_sources=not args.no_auto_download,
+        fail_on_missing_required=True,
+        fail_on_model_error=True,
+        strict_preflight=not args.no_strict_preflight,
+        auto_cap_splits=not args.no_auto_cap_splits,
+        emit_dataset_state=True,
+        preflight_only=args.preflight_only,
+        run_models=tuple(args.run_models),
+        random_state=args.random_state,
+        n_splits=args.n_splits,
+        n_repeats=args.n_repeats,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        patience=args.patience,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        knn_k=args.knn_k,
+        neighborhood_mode=args.neighborhood_mode,
+        model_dim=args.model_dim,
+        type_embedding_dim=args.type_embedding_dim,
+        max_cells=args.max_cells,
+        dropout=args.dropout,
+        focal_gamma=args.focal_gamma,
+        label_smoothing=args.label_smoothing,
+        threshold_grid_size=args.threshold_grid_size,
+        temperature=args.temperature,
+        blend_with_engineered=args.blend_with_engineered,
+        num_layers=args.num_layers,
+        polynomial_order=args.polynomial_order,
+        restriction_hidden_dim=args.restriction_hidden_dim,
+        use_geometric_weights=args.use_geometric_weights,
+        use_orthogonal_restrictions=args.use_orthogonal_restrictions,
+        use_morse_gating=args.use_morse_gating,
+        global_knn_multiplier=args.global_knn_multiplier,
+        global_distance_multiplier=args.global_distance_multiplier,
+        global_max_neighbors=args.global_max_neighbors,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the active spatial-omics benchmark across multiple prepared studies.")
-    parser.add_argument("--config", required=True, help="Path to the MultiDatasetBenchmarkConfig yaml file.")
+    parser.add_argument("--config", default=None, help="Path to the MultiDatasetBenchmarkConfig yaml file.")
+    parser.add_argument("--dataset-source", default=None, help="Catalog source id, e.g. keren_tnbc.")
+    parser.add_argument("--dataset-name", default=None, help="Override dataset name for single-dataset CLI mode.")
+    parser.add_argument("--adapter", default=None, help="Explicit adapter for single-dataset CLI mode.")
+    parser.add_argument("--study-dir", default=None, help="Prepared study directory for single-dataset CLI mode.")
+    parser.add_argument("--input-dir", default=None, help="Raw input directory or file for single-dataset CLI mode.")
+    parser.add_argument("--label-column", default="label", help="Label column for raw-input adapters.")
+    parser.add_argument("--output-subdir", default=None, help="Optional dataset subdirectory inside runs/.")
+    parser.add_argument("--output-dir", default="outputs/active/multidataset_cli", help="Benchmark output root for single-dataset CLI mode.")
+    parser.add_argument("--materialized-data-root", default=None, help="Prepared-study root for materialized datasets.")
+    parser.add_argument("--run-models", nargs="+", default=["graphsage", "toponet_hodge"], choices=["graphsage", "toponet_hodge"])
+    parser.add_argument("--preflight-only", action="store_true")
+    parser.add_argument("--no-auto-download", action="store_true")
+    parser.add_argument("--no-strict-preflight", action="store_true")
+    parser.add_argument("--no-auto-cap-splits", action="store_true")
+    parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument("--n-splits", type=int, default=4)
+    parser.add_argument("--n-repeats", type=int, default=1)
+    parser.add_argument("--batch-size", type=int, default=12)
+    parser.add_argument("--epochs", type=int, default=12)
+    parser.add_argument("--patience", type=int, default=4)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--weight-decay", type=float, default=5e-5)
+    parser.add_argument("--knn-k", type=int, default=6)
+    parser.add_argument("--neighborhood-mode", default="adaptive_knn")
+    parser.add_argument("--model-dim", type=int, default=48)
+    parser.add_argument("--type-embedding-dim", type=int, default=16)
+    parser.add_argument("--max-cells", type=int, default=160)
+    parser.add_argument("--dropout", type=float, default=0.15)
+    parser.add_argument("--focal-gamma", type=float, default=2.0)
+    parser.add_argument("--label-smoothing", type=float, default=0.0)
+    parser.add_argument("--threshold-grid-size", type=int, default=61)
+    parser.add_argument("--temperature", type=float, default=0.5)
+    parser.add_argument("--blend-with-engineered", action="store_true")
+    parser.add_argument("--num-layers", type=int, default=2)
+    parser.add_argument("--polynomial-order", type=int, default=2)
+    parser.add_argument("--restriction-hidden-dim", type=int, default=32)
+    parser.add_argument("--use-geometric-weights", action="store_true")
+    parser.add_argument("--use-orthogonal-restrictions", action="store_true")
+    parser.add_argument("--use-morse-gating", action="store_true")
+    parser.add_argument("--global-knn-multiplier", type=int, default=4)
+    parser.add_argument("--global-distance-multiplier", type=float, default=2.5)
+    parser.add_argument("--global-max-neighbors", type=int, default=24)
     args = parser.parse_args()
 
-    cfg = load_config(args.config, MultiDatasetBenchmarkConfig)
+    cfg = _config_from_args(args)
     root = ensure_dir(cfg.output_dir)
     prepared_root = ensure_dir(cfg.materialized_data_root or (root / "prepared"))
     runs_root = ensure_dir(root / "runs")
@@ -192,7 +312,7 @@ def main() -> int:
         write_source_inventory(Path(root) / "source_inventory.json")
 
     manifest: dict[str, Any] = {
-        "config_path": str(Path(args.config).resolve()),
+        "config_path": str(Path(args.config).resolve()) if args.config else None,
         "preflight_only": cfg.preflight_only,
         "strict_preflight": cfg.strict_preflight,
         "auto_cap_splits": cfg.auto_cap_splits,

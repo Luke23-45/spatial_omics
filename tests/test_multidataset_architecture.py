@@ -184,3 +184,56 @@ def test_resolve_dataset_config_can_auto_download(monkeypatch) -> None:
     assert calls["downloaded"] is True
     assert resolution.status == "raw_available"
     assert cfg.input_dir == "C:\\tmp\\keren"
+
+
+def test_cli_config_builder_for_keren_source() -> None:
+    class Args:
+        config = None
+        dataset_source = "keren_tnbc"
+        dataset_name = "keren_tnbc"
+        adapter = None
+        study_dir = None
+        input_dir = None
+        label_column = "subtype"
+        output_subdir = "keren_tnbc"
+        output_dir = "outputs/active/test_cli"
+        materialized_data_root = None
+        run_models = ["graphsage", "toponet_hodge"]
+        preflight_only = False
+        no_auto_download = False
+        no_strict_preflight = False
+        no_auto_cap_splits = False
+        random_state = 42
+        n_splits = 4
+        n_repeats = 1
+        batch_size = 12
+        epochs = 12
+        patience = 4
+        learning_rate = 1e-3
+        weight_decay = 5e-5
+        knn_k = 6
+        neighborhood_mode = "adaptive_knn"
+        model_dim = 48
+        type_embedding_dim = 16
+        max_cells = 160
+        dropout = 0.15
+        focal_gamma = 2.0
+        label_smoothing = 0.0
+        threshold_grid_size = 61
+        temperature = 0.5
+        blend_with_engineered = False
+        num_layers = 2
+        polynomial_order = 2
+        restriction_hidden_dim = 32
+        use_geometric_weights = False
+        use_orthogonal_restrictions = False
+        use_morse_gating = False
+        global_knn_multiplier = 4
+        global_distance_multiplier = 2.5
+        global_max_neighbors = 24
+
+    cfg = multidataset_runner._config_from_args(Args())
+    assert len(cfg.datasets) == 1
+    assert cfg.datasets[0].source_id == "keren_tnbc"
+    assert cfg.datasets[0].adapter == "keren_tnbc_h5ad"
+    assert cfg.auto_download_sources is True
