@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from spatial_omics.data.adapters.base import SpatialStudyAdapter, StudyDatasetSpec
@@ -46,7 +47,8 @@ class KerenTNBCH5ADStudyAdapter(SpatialStudyAdapter):
                 f"KerenTNBCH5ADStudyAdapter for '{self._spec.name}' requires output_root to materialize a study."
             )
         target = Path(output_root) / self._spec.name
-        if (target / "study_meta.json").is_file():
+        meta_path = target / "study_meta.json"
+        if meta_path.is_file() and self._is_compatible_materialization(meta_path):
             return target
         study = self.load_study()
         save_study(study, target)
@@ -56,6 +58,16 @@ class KerenTNBCH5ADStudyAdapter(SpatialStudyAdapter):
         if not self._spec.input_dir:
             raise ValueError(f"KerenTNBCH5ADStudyAdapter for '{self._spec.name}' requires input_dir.")
         return Path(self._spec.input_dir)
+
+    def _is_compatible_materialization(self, meta_path: Path) -> bool:
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        if meta.get("dataset_name") != (self._spec.dataset_name or self._spec.name):
+            return False
+        study_meta = meta.get("study_meta", {})
+        return study_meta.get("source_schema") == "keren_tnbc_h5ad"
 
 
 __all__ = ["KerenTNBCH5ADStudyAdapter"]
