@@ -24,7 +24,12 @@ from spatial_omics.data.io import load_study
 from spatial_omics.evaluation import study_preflight_report
 from spatial_omics.models.gnn_baselines import run_gnn_baselines_study, save_gnn_baseline_results
 from spatial_omics.models.toponet_hodge import run_toponet_hodge_study, save_toponet_hodge_results
-from spatial_omics.utils.io import ensure_dir
+from spatial_omics.utils.io import ensure_dir, validate_expected_labels
+
+
+EXPECTED_SOURCE_LABELS: dict[str, tuple[str, ...]] = {
+    "keren_tnbc": ("Compartmentalized", "Mixed"),
+}
 
 
 def _resolve_dataset_config(dataset_cfg, *, auto_download_sources: bool):
@@ -185,6 +190,19 @@ def _run_model(model_name: str, cfg: MultiDatasetBenchmarkConfig, study_dir: Pat
     raise ValueError(f"Unsupported model '{model_name}'.")
 
 
+def _validate_source_specific_study(dataset_cfg, study) -> None:
+    if not dataset_cfg.source_id:
+        return
+    expected = EXPECTED_SOURCE_LABELS.get(dataset_cfg.source_id)
+    if expected is None:
+        return
+    validate_expected_labels(
+        study.sample_table["label"].astype(str),
+        expected=expected,
+        context=f"Prepared study for source_id={dataset_cfg.source_id}",
+    )
+
+
 def _config_from_args(args: argparse.Namespace) -> MultiDatasetBenchmarkConfig:
     if args.config:
         return load_config(args.config, MultiDatasetBenchmarkConfig)
@@ -340,6 +358,7 @@ def main() -> int:
 
         dataset_record["study_dir"] = str(study_dir)
         study = load_study(study_dir)
+        _validate_source_specific_study(dataset_cfg, study)
         preflight = study_preflight_report(study, requested_splits=dataset_cfg.max_splits_override or cfg.n_splits)
         effective_splits = _effective_splits(cfg, dataset_cfg, preflight.recommended_max_splits)
         preflight_payload = asdict(preflight)

@@ -616,8 +616,10 @@ def run_toponet_hodge_study(cfg: TopoNetHodgeConfig) -> dict[str, Any]:
         global_max_neighbors=cfg.global_max_neighbors,
     )
     labels_text = np.array([example.label for example in examples], dtype=object)
-    labels = np.array([0 if label == "CLR" else 1 for label in labels_text], dtype=np.int64)
     groups = np.array([example.patient_id for example in examples], dtype=object)
+    unique_labels = sorted(np.unique(labels_text).tolist())
+    label_to_idx = {label: idx for idx, label in enumerate(unique_labels)}
+    labels = np.array([label_to_idx[label] for label in labels_text], dtype=np.int64)
 
     if cfg.split_mode != "grouped":
         raise ValueError(f"Unsupported split_mode: {cfg.split_mode}")
@@ -649,7 +651,7 @@ def run_toponet_hodge_study(cfg: TopoNetHodgeConfig) -> dict[str, Any]:
     run = {
         "feature_set": "TopoNet-Hodge",
         "model_name": "toponet_hodge",
-        "label_classes": ["CLR", "DII"],
+        "label_classes": unique_labels,
         "metrics": mean_metrics,
         "fold_metrics": fold_metrics,
         "top_features": [],

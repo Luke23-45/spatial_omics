@@ -10,7 +10,8 @@ import spatial_omics.scripts.run_multidataset_benchmark as multidataset_runner
 
 from spatial_omics.config import MultiDatasetBenchmarkConfig, MultiDatasetStudyConfig, load_config
 from spatial_omics.data import DatasetResolution, create_study_adapter, registered_study_adapters, resolve_catalog_entry, source_inventory
-from spatial_omics.data.io import load_study
+from spatial_omics.data.io import load_study, save_study
+from spatial_omics.data.types import SpatialStudy
 from spatial_omics.data.processed_crc import ProcessedCRCCODEXAdapter
 from spatial_omics.evaluation import study_preflight_report
 from spatial_omics.scripts.run_multidataset_benchmark import _effective_splits
@@ -237,3 +238,42 @@ def test_cli_config_builder_for_keren_source() -> None:
     assert cfg.datasets[0].source_id == "keren_tnbc"
     assert cfg.datasets[0].adapter == "keren_tnbc_h5ad"
     assert cfg.auto_download_sources is True
+
+
+def test_keren_source_validation_rejects_wrong_labels(tmp_path: Path) -> None:
+    sample_table = pd.DataFrame(
+        [
+            {"region_id": "r1", "sample_id": "s1", "patient_id": "p1", "label": "CLR", "n_cells": 2},
+            {"region_id": "r2", "sample_id": "s2", "patient_id": "p2", "label": "DII", "n_cells": 2},
+        ]
+    )
+    task_table = sample_table[["region_id", "sample_id", "patient_id", "label"]].copy()
+    obs = pd.DataFrame(
+        {
+            "cell_id": ["c1", "c2"],
+            "sample_id": ["s1", "s1"],
+            "patient_id": ["p1", "p1"],
+            "region_id": ["r1", "r1"],
+            "x": [0.0, 1.0],
+            "y": [0.0, 1.0],
+            "cell_type": ["tumor", "immune"],
+            "label": ["CLR", "CLR"],
+        }
+    ).set_index("cell_id")
+    adata = ad.AnnData(
+        X=np.array([[1.0], [2.0]], dtype=np.float32),
+        obs=obs,
+        var=pd.DataFrame(index=["marker_a"]),
+        obsm={"spatial": np.array([[0.0, 0.0], [1.0, 1.0]], dtype=np.float32)},
+        uns={"sample_meta": {"region_id": "r1", "sample_id": "s1", "patient_id": "p1", "label": "CLR"}},
+    )
+    study = SpatialStudy(samples={"r1": adata}, sample_table=sample_table.iloc[:1].copy(), task_table=task_table.iloc[:1].copy(), dataset_name="keren_tnbc")
+    study_dir = save_study(study, tmp_path / "bad_keren")
+    dataset_cfg = MultiDatasetStudyConfig(name="keren_tnbc", source_id="keren_tnbc", study_dir=str(study_dir))
+    loaded = load_study(study_dir)
+    try:
+        multidataset_runner._validate_source_specific_study(dataset_cfg, loaded)
+    except ValueError as exc:
+        assert "label mismatch" in str(exc)
+    else:
+        raise AssertionError("Expected keren_tnbc label validation to fail for wrong labels.")
