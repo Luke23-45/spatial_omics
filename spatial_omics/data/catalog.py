@@ -89,7 +89,7 @@ CATALOG: dict[str, DatasetCatalogEntry] = {
     ),
     "keren_tnbc": DatasetCatalogEntry(
         name="keren_tnbc",
-        adapter="prepared_study",
+        adapter="keren_tnbc_h5ad",
         dataset_name="keren_tnbc",
         modality="MIBI-TOF",
         disease="triple-negative breast cancer",
@@ -99,6 +99,7 @@ CATALOG: dict[str, DatasetCatalogEntry] = {
             _abs("data/spatial_omics/prepared/keren_tnbc"),
         ),
         candidate_input_dirs=(
+            _abs("data/spatial_omics/raw"),
             _abs("data/spatial_omics/raw/keren_tnbc"),
             _abs("data/spatial_omics/external/keren_tnbc"),
         ),
@@ -180,7 +181,7 @@ def resolve_catalog_entry(name: str) -> DatasetResolution:
         if Path(input_dir).exists():
             return DatasetResolution(
                 name=entry.name,
-                adapter="processed_cell_table",
+                adapter=entry.adapter,
                 dataset_name=entry.dataset_name,
                 status="raw_available",
                 input_dir=input_dir,

@@ -5,8 +5,10 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.request import urlopen, urlretrieve
 
-from spatial_omics.data.catalog import DatasetResolution, get_catalog_entry, known_dataset_names, resolve_catalog_entry
+from spatial_omics.data.catalog import PROJECT_ROOT, DatasetResolution, get_catalog_entry, known_dataset_names, resolve_catalog_entry
+from spatial_omics.utils.io import ensure_dir
 
 
 SOURCE_MANIFEST_FILENAME = "source_state.json"
@@ -85,9 +87,35 @@ def write_dataset_source_state(output_dir: str | Path, resolution: DatasetResolu
     return path
 
 
+def ensure_catalog_source_available(name: str) -> DatasetResolution:
+    resolution = resolve_catalog_entry(name)
+    if resolution.status != "missing":
+        return resolution
+    if name == "keren_tnbc":
+        _download_keren_tnbc()
+        return resolve_catalog_entry(name)
+    return resolution
+
+
+def _download_keren_tnbc() -> Path:
+    article_url = "https://api.figshare.com/v2/articles/26068006"
+    article_payload = json.loads(urlopen(article_url).read().decode("utf-8"))
+    files = article_payload.get("files", [])
+    if not files:
+        raise RuntimeError("Figshare article for Keren TNBC did not return any files.")
+    download_url = str(files[0]["download_url"])
+    filename = str(files[0]["name"])
+    target_dir = ensure_dir(PROJECT_ROOT / "data" / "spatial_omics" / "raw" / "keren_tnbc")
+    target_path = target_dir / filename
+    if not target_path.is_file():
+        urlretrieve(download_url, target_path)
+    return target_path
+
+
 __all__ = [
     "DatasetSourceState",
     "SOURCE_MANIFEST_FILENAME",
+    "ensure_catalog_source_available",
     "dataset_source_state",
     "source_inventory",
     "write_dataset_source_state",

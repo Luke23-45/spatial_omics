@@ -12,13 +12,6 @@ datasets:
     skip_if_unavailable: true
     notes:
       - Supporting external validation if prepared locally or on the cloud node.
-  - name: breast_imc_support
-    source_id: ali_breast_imc
-    output_subdir: breast_imc_support
-    required: false
-    skip_if_unavailable: true
-    notes:
-      - Supporting external validation if labels are finalized and study is prepared.
 
 output_dir: outputs/active/multidataset_cloud_preflight
 run_models:

@@ -1,23 +1,14 @@
 datasets:
-#  - name: crc_main
-#    source_id: crc_main
-#    output_subdir: crc_main
-#    required: true
-#    notes:
-#      - Primary thesis cohort.
   - name: tnbc_support
     source_id: keren_tnbc
     output_subdir: tnbc_support
-    required: false
-    skip_if_unavailable: true
-    notes:
-      - External support study once prepared.
+    required: true
 
-output_dir: outputs/active/multidataset_cloud_train
+output_dir: outputs/active/keren_tnbc_local_smoke
 run_models:
   - graphsage
   - toponet_hodge
-materialized_data_root: outputs/active/multidataset_cloud_train/prepared
+materialized_data_root: outputs/active/keren_tnbc_local_smoke/prepared
 fail_on_missing_required: true
 fail_on_model_error: true
 strict_preflight: true
@@ -25,27 +16,27 @@ auto_cap_splits: true
 emit_dataset_state: true
 preflight_only: false
 random_state: 42
-n_splits: 4
+n_splits: 2
 n_repeats: 1
-batch_size: 12
-epochs: 12
-patience: 4
+batch_size: 4
+epochs: 1
+patience: 1
 learning_rate: 0.001
 weight_decay: 0.00005
-knn_k: 6
+knn_k: 3
 neighborhood_mode: adaptive_knn
-model_dim: 48
+model_dim: 24
 type_embedding_dim: 16
-max_cells: 160
+max_cells: 64
 dropout: 0.15
 focal_gamma: 2.0
 label_smoothing: 0.0
-threshold_grid_size: 61
+threshold_grid_size: 31
 temperature: 0.5
 blend_with_engineered: false
-num_layers: 2
-polynomial_order: 2
-restriction_hidden_dim: 32
+num_layers: 1
+polynomial_order: 1
+restriction_hidden_dim: 16
 use_geometric_weights: false
 use_orthogonal_restrictions: false
 use_morse_gating: false

@@ -9,6 +9,7 @@ from typing import Any
 from spatial_omics.config import GNNBaselineConfig, MultiDatasetBenchmarkConfig, TopoNetHodgeConfig, load_config
 from spatial_omics.data import (
     create_study_adapter,
+    ensure_catalog_source_available,
     resolve_catalog_entry,
     write_dataset_source_state,
     write_source_inventory,
@@ -20,10 +21,12 @@ from spatial_omics.models.toponet_hodge import run_toponet_hodge_study, save_top
 from spatial_omics.utils.io import ensure_dir
 
 
-def _resolve_dataset_config(dataset_cfg):
+def _resolve_dataset_config(dataset_cfg, *, auto_download_sources: bool):
     if not dataset_cfg.source_id:
         return None
     resolution = resolve_catalog_entry(dataset_cfg.source_id)
+    if auto_download_sources and resolution.status == "missing":
+        resolution = ensure_catalog_source_available(dataset_cfg.source_id)
     if dataset_cfg.study_dir is None:
         dataset_cfg.study_dir = resolution.study_dir
     if dataset_cfg.input_dir is None:
@@ -198,7 +201,7 @@ def main() -> int:
     }
 
     for dataset_cfg in cfg.datasets:
-        resolution = _resolve_dataset_config(dataset_cfg)
+        resolution = _resolve_dataset_config(dataset_cfg, auto_download_sources=cfg.auto_download_sources)
         dataset_record = _dataset_record_base(dataset_cfg, resolution)
         dataset_root = ensure_dir(runs_root / (dataset_cfg.output_subdir or dataset_cfg.name))
 

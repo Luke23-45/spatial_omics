@@ -7,10 +7,6 @@ datasets:
     source_id: keren_tnbc
     output_subdir: tnbc_support
     skip_if_unavailable: true
-  - name: breast_imc_support
-    source_id: ali_breast_imc
-    output_subdir: breast_imc_support
-    skip_if_unavailable: true
 
 output_dir: outputs/active/multidataset_benchmark
 run_models:

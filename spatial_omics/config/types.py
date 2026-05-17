@@ -133,6 +133,7 @@ class MultiDatasetBenchmarkConfig:
     features_path: str | None = None
     run_models: tuple[str, ...] = ("graphsage", "toponet_hodge")
     materialized_data_root: str | None = None
+    auto_download_sources: bool = True
     fail_on_missing_required: bool = True
     fail_on_model_error: bool = True
     strict_preflight: bool = True

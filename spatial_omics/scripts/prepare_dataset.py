@@ -6,6 +6,7 @@ from pathlib import Path
 from spatial_omics.config import PrepareConfig, load_config
 from spatial_omics.data.cellsighter_crc import CellSighterCRCTestDatasetAdapter
 from spatial_omics.data.io import save_study
+from spatial_omics.data.keren_tnbc import EXPECTED_FILENAMES, KerenTNBCH5ADAdapter
 from spatial_omics.data.processed_crc import ProcessedCRCCODEXAdapter
 
 
@@ -62,6 +63,12 @@ def main() -> int:
             clinical_patient_id_column=cfg.clinical_patient_id_column,
             clinical_label_column=cfg.clinical_label_column,
             clinical_label_map=cfg.clinical_label_map,
+        )
+    elif input_dir.is_file() or any((input_dir / filename).is_file() for filename in EXPECTED_FILENAMES):
+        adapter = KerenTNBCH5ADAdapter(
+            input_dir=cfg.input_dir,
+            dataset_name=cfg.dataset_name,
+            label_column=cfg.label_column,
         )
     else:
         adapter = ProcessedCRCCODEXAdapter(

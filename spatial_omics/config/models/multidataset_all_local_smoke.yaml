@@ -16,11 +16,6 @@ datasets:
     output_subdir: tnbc_support
     required: false
     skip_if_unavailable: true
-  - name: breast_imc_support
-    source_id: ali_breast_imc
-    output_subdir: breast_imc_support
-    required: false
-    skip_if_unavailable: true
 
 output_dir: outputs/active/multidataset_all_local_smoke
 run_models:

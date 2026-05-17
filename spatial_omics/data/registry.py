@@ -3,10 +3,16 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
-from spatial_omics.data.adapters import PreparedStudyAdapter, ProcessedCellTableStudyAdapter, SpatialStudyAdapter
+from spatial_omics.data.adapters import (
+    KerenTNBCH5ADStudyAdapter,
+    PreparedStudyAdapter,
+    ProcessedCellTableStudyAdapter,
+    SpatialStudyAdapter,
+)
 
 
 _ADAPTERS: dict[str, type[SpatialStudyAdapter]] = {
+    "keren_tnbc_h5ad": KerenTNBCH5ADStudyAdapter,
     "prepared_study": PreparedStudyAdapter,
     "processed_cell_table": ProcessedCellTableStudyAdapter,
 }
