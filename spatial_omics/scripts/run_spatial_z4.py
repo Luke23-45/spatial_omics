@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import argparse
 
-from spatial_omics.models.spatial_z4 import SpatialZ4Config, run_spatial_z4_study, save_spatial_z4_results
+from spatial_omics.models.legacy.spatial_z4 import SpatialZ4Config, run_spatial_z4_study, save_spatial_z4_results
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the canonical retained spatial_z4_v2 grouped-CV topology model on a prepared spatial-omics study.")
+    parser = argparse.ArgumentParser(description="Run the legacy spatial_z4_v2 model on a prepared spatial-omics study.")
     parser.add_argument("--study-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--baseline-results-json", default=None)

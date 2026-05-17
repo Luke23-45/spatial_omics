@@ -1,8 +1,8 @@
 """Canonical active model registry for the dedicated repo."""
 
 ACTIVE_BASELINE_MODEL = "graphsage"
-ACTIVE_TOPOLOGY_MODEL = "spatial_z4_v2"
-EXPERIMENTAL_TOPOLOGY_MODEL = "toponet_hodge"
+ACTIVE_TOPOLOGY_MODEL = "toponet_hodge"
+EXPERIMENTAL_TOPOLOGY_MODEL = None
 
 SUPPORTED_MODELS = {
     ACTIVE_BASELINE_MODEL: {
@@ -12,12 +12,7 @@ SUPPORTED_MODELS = {
     },
     ACTIVE_TOPOLOGY_MODEL: {
         "family": "topology",
-        "description": "Retained standalone topology-oriented Spatial-Z4 v2 configuration.",
-        "entrypoint": "python -m spatial_omics.scripts.run_spatial_z4",
-    },
-    EXPERIMENTAL_TOPOLOGY_MODEL: {
-        "family": "topology",
-        "description": "Fair simplicial Hodge topology benchmark built from node-edge-triangle complexes.",
+        "description": "Active simplicial Hodge topology benchmark built from node-edge-triangle complexes.",
         "entrypoint": "python -m spatial_omics.scripts.run_toponet_hodge",
     },
 }

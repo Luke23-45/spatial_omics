@@ -8,7 +8,7 @@ from spatial_omics import ACTIVE_BASELINE_MODEL, ACTIVE_TOPOLOGY_MODEL, EXPERIME
 from spatial_omics.data.io import save_study
 from spatial_omics.data.processed_crc import ProcessedCRCCODEXAdapter
 from spatial_omics.models.gnn_baselines import GNNBaselineConfig, run_gnn_baselines_study
-from spatial_omics.models.spatial_z4 import SpatialZ4Config, build_region_examples, run_spatial_z4_study
+from spatial_omics.models.legacy.spatial_z4 import build_region_examples
 from spatial_omics.models.toponet_hodge import TopoNetHodgeConfig, run_toponet_hodge_study
 
 
@@ -68,9 +68,9 @@ def _prepare_study(tmp_path: Path) -> Path:
 
 def test_active_registry_is_narrow() -> None:
     assert ACTIVE_BASELINE_MODEL == "graphsage"
-    assert ACTIVE_TOPOLOGY_MODEL == "spatial_z4_v2"
-    assert EXPERIMENTAL_TOPOLOGY_MODEL == "toponet_hodge"
-    assert set(SUPPORTED_MODELS) == {"graphsage", "spatial_z4_v2", "toponet_hodge"}
+    assert ACTIVE_TOPOLOGY_MODEL == "toponet_hodge"
+    assert EXPERIMENTAL_TOPOLOGY_MODEL is None
+    assert set(SUPPORTED_MODELS) == {"graphsage", "toponet_hodge"}
 
 
 def test_build_region_examples_smoke(tmp_path: Path) -> None:
@@ -101,30 +101,6 @@ def test_graphsage_smoke_run(tmp_path: Path) -> None:
     results = run_gnn_baselines_study(cfg)
     assert results["runs"][0]["model_name"] == "graphsage"
     assert 0.0 <= results["runs"][0]["metrics"]["balanced_accuracy"] <= 1.0
-
-
-def test_spatial_z4_v2_smoke_run(tmp_path: Path) -> None:
-    prepared_dir = _prepare_study(tmp_path)
-    cfg = SpatialZ4Config(
-        study_dir=str(prepared_dir),
-        output_dir=str(tmp_path / "spatial_out"),
-        n_splits=2,
-        n_repeats=1,
-        epochs=1,
-        patience=1,
-        batch_size=4,
-        knn_k=3,
-        model_dim=24,
-        anchor_count=4,
-        router_steps=2,
-        lift_dim=8,
-        max_cells=32,
-        blend_with_engineered=False,
-        use_engineered_context=False,
-    )
-    results = run_spatial_z4_study(cfg)
-    assert results["summary"]["best_run"]["model_name"] == "spatial_z4_v2"
-    assert 0.0 <= results["summary"]["best_run"]["metrics"]["auroc"] <= 1.0
 
 
 def test_toponet_hodge_smoke_run(tmp_path: Path) -> None:

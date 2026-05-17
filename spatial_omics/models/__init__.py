@@ -2,7 +2,6 @@
 
 from spatial_omics.models.gnn_baselines import GNNBaselineConfig, run_gnn_baselines_study, save_gnn_baseline_results
 from spatial_omics.models.registry import ACTIVE_BASELINE_MODEL, ACTIVE_TOPOLOGY_MODEL, SUPPORTED_MODELS
-from spatial_omics.models.spatial_z4 import SpatialZ4Config, run_spatial_z4_study, save_spatial_z4_results
 from spatial_omics.models.toponet_hodge import TopoNetHodgeConfig, run_toponet_hodge_study, save_toponet_hodge_results
 
 __all__ = [
@@ -10,12 +9,9 @@ __all__ = [
     "ACTIVE_TOPOLOGY_MODEL",
     "SUPPORTED_MODELS",
     "GNNBaselineConfig",
-    "SpatialZ4Config",
     "TopoNetHodgeConfig",
     "run_gnn_baselines_study",
     "save_gnn_baseline_results",
-    "run_spatial_z4_study",
-    "save_spatial_z4_results",
     "run_toponet_hodge_study",
     "save_toponet_hodge_results",
 ]

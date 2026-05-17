@@ -3,9 +3,9 @@
 Dedicated spatial-omics benchmark repo with two supported active model tracks:
 
 - `GraphSAGE` baseline
-- `spatial_z4_v2` topology model
+- `TopoNet-Hodge` topology model
 
-The repo is intentionally narrow. Historical experiments are preserved under `archive/`, but the active surface is limited to the data pipeline, feature extraction, the two benchmark models, and the retained canonical results.
+The repo is intentionally narrow. Historical experiments are preserved under `archive/`, and legacy code such as `spatial_z4_v2` is kept only for reproducibility. The active surface is limited to the data pipeline, feature extraction, and the current benchmark models.
 
 See:
 

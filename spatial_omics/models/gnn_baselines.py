@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from spatial_omics.utils.io import ensure_dir
 
 from spatial_omics.evaluation.splits import bootstrap_ci, build_grouped_splits, build_lopo_splits
-from spatial_omics.models.spatial_z4 import (
+from spatial_omics.models.legacy.spatial_z4 import (
     RegionDataset,
     SpatialRegionExample,
     _apply_platt_scaling,

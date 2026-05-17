@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 from sklearn.metrics import balanced_accuracy_score, f1_score, roc_auc_score
 
-from spatial_omics.models.spatial_z4 import (
+from spatial_omics.models.legacy.spatial_z4 import (
     SpatialZ4Config,
     _apply_platt_scaling,
     _best_blend,

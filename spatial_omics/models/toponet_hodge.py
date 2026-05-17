@@ -12,7 +12,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from spatial_omics.evaluation.splits import bootstrap_ci, build_grouped_splits
-from spatial_omics.models.spatial_z4 import (
+from spatial_omics.models.legacy.spatial_z4 import (
     RegionDataset,
     SpatialRegionExample,
     _apply_platt_scaling,
@@ -27,7 +27,35 @@ from spatial_omics.models.spatial_z4 import (
 from spatial_omics.utils.io import ensure_dir
 
 
-from spatial_omics.config import TopoNetHodgeConfig
+@dataclass
+class TopoNetHodgeConfig:
+    study_dir: str
+    output_dir: str
+    features_path: str | None = None
+    random_state: int = 42
+    n_splits: int = 4
+    n_repeats: int = 1
+    split_mode: str = "grouped"
+    batch_size: int = 12
+    epochs: int = 12
+    patience: int = 4
+    learning_rate: float = 1e-3
+    weight_decay: float = 5e-5
+    knn_k: int = 6
+    neighborhood_mode: str = "adaptive_knn"
+    model_dim: int = 48
+    type_embedding_dim: int = 16
+    max_cells: int = 160
+    dropout: float = 0.15
+    focal_gamma: float = 2.0
+    label_smoothing: float = 0.0
+    threshold_grid_size: int = 61
+    num_layers: int = 2
+    polynomial_order: int = 2
+    restriction_hidden_dim: int = 32
+    global_knn_multiplier: int = 4
+    global_distance_multiplier: float = 2.5
+    global_max_neighbors: int = 24
 
 
 def _make_loader(examples: list[SpatialRegionExample], labels: np.ndarray, *, batch_size: int, shuffle: bool) -> DataLoader:
@@ -69,9 +97,7 @@ def _extract_triangles(adjacency: np.ndarray) -> list[tuple[int, int, int]]:
     return triangles
 
 
-def _build_boundary_matrices(
-    example: SpatialRegionExample,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _build_boundary_matrices(example: SpatialRegionExample) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     n_cells = example.coords.shape[0]
     edges, adjacency = _extract_edges(example)
     triangles = _extract_triangles(adjacency)
@@ -80,31 +106,23 @@ def _build_boundary_matrices(
 
     b1 = np.zeros((n_cells, max(n_edges, 1)), dtype=np.float32)
     edge_mask = np.zeros(max(n_edges, 1), dtype=bool)
-    edge_weight = np.ones(max(n_edges, 1), dtype=np.float32)
     edge_lookup: dict[tuple[int, int], int] = {}
     for edge_idx, (u, v) in enumerate(edges):
         edge_lookup[(u, v)] = edge_idx
         b1[u, edge_idx] = -1.0
         b1[v, edge_idx] = 1.0
         edge_mask[edge_idx] = True
-        length = float(np.linalg.norm(example.coords[u] - example.coords[v]))
-        edge_weight[edge_idx] = 1.0 / max(length, 1e-3)
 
     b2 = np.zeros((max(n_edges, 1), max(n_triangles, 1)), dtype=np.float32)
     tri_mask = np.zeros(max(n_triangles, 1), dtype=bool)
-    triangle_weight = np.ones(max(n_triangles, 1), dtype=np.float32)
     for tri_idx, (a, b, c) in enumerate(triangles):
         tri_mask[tri_idx] = True
         # Boundary of oriented simplex [a,b,c] is [b,c] - [a,c] + [a,b].
         b2[edge_lookup[(b, c)], tri_idx] = 1.0
         b2[edge_lookup[(a, c)], tri_idx] = -1.0
         b2[edge_lookup[(a, b)], tri_idx] = 1.0
-        ab = example.coords[b] - example.coords[a]
-        ac = example.coords[c] - example.coords[a]
-        area = 0.5 * abs(float(ab[0] * ac[1] - ab[1] * ac[0]))
-        triangle_weight[tri_idx] = 1.0 / max(area, 1e-3)
 
-    return b1, b2, edge_mask, tri_mask, edge_weight, triangle_weight
+    return b1, b2, edge_mask, tri_mask
 
 
 def _collate_toponet_batch(batch: list[tuple[SpatialRegionExample, int]]) -> dict[str, torch.Tensor]:
@@ -114,17 +132,15 @@ def _collate_toponet_batch(batch: list[tuple[SpatialRegionExample, int]]) -> dic
     max_nodes = collated["coords"].shape[1]
 
     complexes = [_build_boundary_matrices(example) for example in examples]
-    max_edges = max(b1.shape[1] for b1, _b2, _edge_mask, _tri_mask, _ew, _tw in complexes)
-    max_triangles = max(b2.shape[1] for _b1, b2, _edge_mask, _tri_mask, _ew, _tw in complexes)
+    max_edges = max(b1.shape[1] for b1, _b2, _edge_mask, _tri_mask in complexes)
+    max_triangles = max(b2.shape[1] for _b1, b2, _edge_mask, _tri_mask in complexes)
 
     b1_tensor = torch.zeros(batch_size, max_nodes, max_edges, dtype=torch.float32)
     b2_tensor = torch.zeros(batch_size, max_edges, max_triangles, dtype=torch.float32)
     edge_mask_tensor = torch.zeros(batch_size, max_edges, dtype=torch.bool)
     tri_mask_tensor = torch.zeros(batch_size, max_triangles, dtype=torch.bool)
-    edge_weight_tensor = torch.ones(batch_size, max_edges, dtype=torch.float32)
-    triangle_weight_tensor = torch.ones(batch_size, max_triangles, dtype=torch.float32)
 
-    for batch_idx, (example, (b1, b2, edge_mask, tri_mask, edge_weight, triangle_weight)) in enumerate(zip(examples, complexes, strict=False)):
+    for batch_idx, (example, (b1, b2, edge_mask, tri_mask)) in enumerate(zip(examples, complexes, strict=False)):
         n_nodes = example.coords.shape[0]
         n_edges = b1.shape[1]
         n_triangles = b2.shape[1]
@@ -132,35 +148,18 @@ def _collate_toponet_batch(batch: list[tuple[SpatialRegionExample, int]]) -> dic
         b2_tensor[batch_idx, :n_edges, :n_triangles] = torch.from_numpy(b2)
         edge_mask_tensor[batch_idx, :n_edges] = torch.from_numpy(edge_mask)
         tri_mask_tensor[batch_idx, :n_triangles] = torch.from_numpy(tri_mask)
-        edge_weight_tensor[batch_idx, :n_edges] = torch.from_numpy(edge_weight)
-        triangle_weight_tensor[batch_idx, :n_triangles] = torch.from_numpy(triangle_weight)
 
     collated["B1"] = b1_tensor
     collated["B2"] = b2_tensor
     collated["edge_mask"] = edge_mask_tensor
     collated["triangle_mask"] = tri_mask_tensor
-    collated["edge_weight"] = edge_weight_tensor
-    collated["triangle_weight"] = triangle_weight_tensor
     return collated
 
 
 class SimplicialHodgeLayer(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        polynomial_order: int,
-        dropout: float,
-        restriction_hidden_dim: int,
-        *,
-        use_geometric_weights: bool,
-        use_orthogonal_restrictions: bool,
-        use_morse_gating: bool,
-    ) -> None:
+    def __init__(self, dim: int, polynomial_order: int, dropout: float, restriction_hidden_dim: int) -> None:
         super().__init__()
         self.polynomial_order = polynomial_order
-        self.use_geometric_weights = use_geometric_weights
-        self.use_orthogonal_restrictions = use_orthogonal_restrictions
-        self.use_morse_gating = use_morse_gating
         self.theta0 = nn.Parameter(torch.zeros(polynomial_order + 1))
         self.theta1_down = nn.Parameter(torch.zeros(polynomial_order + 1))
         self.theta1_up = nn.Parameter(torch.zeros(polynomial_order + 1))
@@ -199,16 +198,6 @@ class SimplicialHodgeLayer(nn.Module):
             nn.GELU(),
             nn.Linear(restriction_hidden_dim, dim),
         )
-        self.edge_score = nn.Sequential(
-            nn.Linear(dim * 2, restriction_hidden_dim),
-            nn.GELU(),
-            nn.Linear(restriction_hidden_dim, 1),
-        )
-        self.triangle_score = nn.Sequential(
-            nn.Linear(dim * 2, restriction_hidden_dim),
-            nn.GELU(),
-            nn.Linear(restriction_hidden_dim, 1),
-        )
 
         self.endpoint_score = nn.Sequential(
             nn.Linear(dim * 2, restriction_hidden_dim),
@@ -244,16 +233,7 @@ class SimplicialHodgeLayer(nn.Module):
         denom = weights.sum(dim=-1, keepdim=True).clamp_min(1.0)
         return torch.bmm(weights, values) / denom
 
-    def _orthogonal_restrict(self, source: torch.Tensor, target: torch.Tensor, restrictor: nn.Module) -> torch.Tensor:
-        vector = restrictor(torch.cat([source, target], dim=-1))
-        vector = vector / vector.norm(dim=-1, keepdim=True).clamp_min(1e-6)
-        reflected = source - 2.0 * vector * (vector * source).sum(dim=-1, keepdim=True)
-        return reflected
-
     def _restricted_message(self, source: torch.Tensor, target: torch.Tensor, restrictor: nn.Module, projector: nn.Module) -> torch.Tensor:
-        if self.use_orthogonal_restrictions:
-            reflected = self._orthogonal_restrict(source, target, restrictor)
-            return projector(reflected)
         gate = torch.softmax(restrictor(torch.cat([source, target], dim=-1)), dim=-1)
         return gate * projector(source)
 
@@ -293,29 +273,16 @@ class SimplicialHodgeLayer(nn.Module):
         triangle_state: torch.Tensor,
         b1: torch.Tensor,
         b2: torch.Tensor,
-        edge_weight: torch.Tensor,
-        triangle_weight: torch.Tensor,
         node_mask: torch.Tensor,
         edge_mask: torch.Tensor,
         triangle_mask: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         b1_t = b1.transpose(1, 2)
         b2_t = b2.transpose(1, 2)
-        if self.use_geometric_weights:
-            weighted_b1 = b1 * edge_weight.unsqueeze(1)
-            l0 = torch.bmm(weighted_b1, b1_t)
-            node_volume = torch.bmm(b1.abs(), edge_weight.unsqueeze(-1)).squeeze(-1).clamp_min(1e-6)
-            inv_node_volume_b1 = b1 * node_volume.reciprocal().unsqueeze(-1)
-            l1_down = torch.bmm(b1_t, inv_node_volume_b1)
-            weighted_b2 = b2 * triangle_weight.unsqueeze(1)
-            l1_up = torch.bmm(weighted_b2, b2_t)
-            inv_edge_weight_b2 = b2 * edge_weight.reciprocal().unsqueeze(-1)
-            l2 = torch.bmm(b2_t, inv_edge_weight_b2)
-        else:
-            l0 = torch.bmm(b1, b1_t)
-            l1_down = torch.bmm(b1_t, b1)
-            l1_up = torch.bmm(b2, b2_t)
-            l2 = torch.bmm(b2_t, b2)
+        l0 = torch.bmm(b1, b1_t)
+        l1_down = torch.bmm(b1_t, b1)
+        l1_up = torch.bmm(b2, b2_t)
+        l2 = torch.bmm(b2_t, b2)
 
         pos_b1 = (b1 > 0).float().transpose(1, 2)
         neg_b1 = (b1 < 0).float().transpose(1, 2)
@@ -339,11 +306,6 @@ class SimplicialHodgeLayer(nn.Module):
 
         triangle_avg = self._masked_average(abs_b2, triangle_state)
         curl_message = self._restricted_message(triangle_avg, edge_state, self.triangle_restrict, self.triangle_to_edge_proj)
-        if self.use_morse_gating:
-            edge_gate = torch.sigmoid(self.edge_score(torch.cat([src_nodes, dst_nodes], dim=-1))) * edge_mask.unsqueeze(-1).float()
-            triangle_gate = torch.sigmoid(self.triangle_score(torch.cat([triangle_avg, edge_state], dim=-1))) * edge_mask.unsqueeze(-1).float()
-            grad_message = grad_message * edge_gate
-            curl_message = curl_message * triangle_gate
 
         edge_diffusion = self.edge_self(self._poly_apply(l1_down, edge_state, self.theta1_down) + self._poly_apply(l1_up, edge_state, self.theta1_up))
         grad_component, curl_component, harmonic_component = self._approx_harmonic_projection(
@@ -390,9 +352,6 @@ class TopoNetHodgeClassifier(nn.Module):
         polynomial_order: int,
         restriction_hidden_dim: int,
         dropout: float,
-        use_geometric_weights: bool,
-        use_orthogonal_restrictions: bool,
-        use_morse_gating: bool,
     ) -> None:
         super().__init__()
         self.type_embedding = nn.Embedding(num_types + 1, type_embedding_dim)
@@ -416,9 +375,6 @@ class TopoNetHodgeClassifier(nn.Module):
                     polynomial_order=polynomial_order,
                     dropout=dropout,
                     restriction_hidden_dim=restriction_hidden_dim,
-                    use_geometric_weights=use_geometric_weights,
-                    use_orthogonal_restrictions=use_orthogonal_restrictions,
-                    use_morse_gating=use_morse_gating,
                 )
                 for _ in range(max(1, num_layers))
             ]
@@ -490,8 +446,6 @@ class TopoNetHodgeClassifier(nn.Module):
                 triangle_state,
                 batch["B1"],
                 batch["B2"],
-                batch["edge_weight"],
-                batch["triangle_weight"],
                 node_mask,
                 edge_mask,
                 triangle_mask,
@@ -586,9 +540,6 @@ def _train_fold(
         polynomial_order=cfg.polynomial_order,
         restriction_hidden_dim=cfg.restriction_hidden_dim,
         dropout=cfg.dropout,
-        use_geometric_weights=cfg.use_geometric_weights,
-        use_orthogonal_restrictions=cfg.use_orthogonal_restrictions,
-        use_morse_gating=cfg.use_morse_gating,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
     class_counts = np.bincount(train_labels, minlength=2).astype(np.float32)

@@ -21,8 +21,8 @@ def test_build_report_smoke(tmp_path: Path) -> None:
                 "top_features": [],
             },
             {
-                "feature_set": "Spatial-Z4",
-                "model_name": "spatial_z4_v2",
+                "feature_set": "TopoNet-Hodge",
+                "model_name": "toponet_hodge",
                 "metrics": {
                     "auroc": 0.94,
                     "balanced_accuracy": 0.82,

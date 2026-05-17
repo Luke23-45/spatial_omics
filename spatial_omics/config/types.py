@@ -110,4 +110,71 @@ class GNNBaselineConfig:
     split_mode: str = "grouped"
 
 
-__all__ = ["FeatureConfig", "PrepareConfig", "ReportConfig", "TopoNetHodgeConfig", "GNNBaselineConfig"]
+@dataclass
+class MultiDatasetStudyConfig:
+    name: str
+    source_id: str | None = None
+    adapter: str = "prepared_study"
+    dataset_name: str | None = None
+    study_dir: str | None = None
+    input_dir: str | None = None
+    label_column: str = "label"
+    output_subdir: str | None = None
+    required: bool = False
+    skip_if_unavailable: bool = True
+    max_splits_override: int | None = None
+    notes: tuple[str, ...] = ()
+
+
+@dataclass
+class MultiDatasetBenchmarkConfig:
+    datasets: list[MultiDatasetStudyConfig] = field(default_factory=list)
+    output_dir: str = "outputs/active/multidataset_benchmark"
+    features_path: str | None = None
+    run_models: tuple[str, ...] = ("graphsage", "toponet_hodge")
+    materialized_data_root: str | None = None
+    fail_on_missing_required: bool = True
+    fail_on_model_error: bool = True
+    strict_preflight: bool = True
+    auto_cap_splits: bool = True
+    emit_dataset_state: bool = True
+    preflight_only: bool = False
+    random_state: int = 42
+    n_splits: int = 4
+    n_repeats: int = 1
+    batch_size: int = 12
+    epochs: int = 12
+    patience: int = 4
+    learning_rate: float = 1e-3
+    weight_decay: float = 5e-5
+    knn_k: int = 6
+    neighborhood_mode: str = "adaptive_knn"
+    model_dim: int = 48
+    type_embedding_dim: int = 16
+    max_cells: int = 160
+    dropout: float = 0.15
+    focal_gamma: float = 2.0
+    label_smoothing: float = 0.0
+    threshold_grid_size: int = 61
+    temperature: float = 0.5
+    blend_with_engineered: bool = False
+    num_layers: int = 2
+    polynomial_order: int = 2
+    restriction_hidden_dim: int = 32
+    use_geometric_weights: bool = False
+    use_orthogonal_restrictions: bool = False
+    use_morse_gating: bool = False
+    global_knn_multiplier: int = 4
+    global_distance_multiplier: float = 2.5
+    global_max_neighbors: int = 24
+
+
+__all__ = [
+    "FeatureConfig",
+    "GNNBaselineConfig",
+    "MultiDatasetBenchmarkConfig",
+    "MultiDatasetStudyConfig",
+    "PrepareConfig",
+    "ReportConfig",
+    "TopoNetHodgeConfig",
+]

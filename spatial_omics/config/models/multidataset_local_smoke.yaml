@@ -1,0 +1,53 @@
+datasets:
+  - name: crc_main
+    source_id: crc_main
+    output_subdir: crc_main
+    required: true
+  - name: crc_subset8
+    source_id: crc_subset8
+    output_subdir: crc_subset8
+    required: true
+  - name: crc_test
+    source_id: crc_test
+    output_subdir: crc_test
+    required: true
+
+output_dir: outputs/active/multidataset_local_smoke
+run_models:
+  - graphsage
+  - toponet_hodge
+materialized_data_root: outputs/active/multidataset_local_smoke/prepared
+fail_on_missing_required: true
+fail_on_model_error: true
+strict_preflight: true
+auto_cap_splits: true
+emit_dataset_state: true
+preflight_only: false
+random_state: 42
+n_splits: 2
+n_repeats: 1
+batch_size: 4
+epochs: 1
+patience: 1
+learning_rate: 0.001
+weight_decay: 0.00005
+knn_k: 3
+neighborhood_mode: adaptive_knn
+model_dim: 24
+type_embedding_dim: 16
+max_cells: 64
+dropout: 0.15
+focal_gamma: 2.0
+label_smoothing: 0.0
+threshold_grid_size: 31
+temperature: 0.5
+blend_with_engineered: false
+num_layers: 1
+polynomial_order: 1
+restriction_hidden_dim: 16
+use_geometric_weights: false
+use_orthogonal_restrictions: false
+use_morse_gating: false
+global_knn_multiplier: 4
+global_distance_multiplier: 2.5
+global_max_neighbors: 24
