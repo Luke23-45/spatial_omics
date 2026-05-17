@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import anndata as ad
 import numpy as np
 import pandas as pd
 
@@ -28,9 +27,17 @@ class KerenTNBCH5ADAdapter:
     sample_column: str = "SampleID"
 
     def load_study(self) -> SpatialStudy:
+        try:
+            import anndata as ad
+        except ImportError as exc:
+            raise RuntimeError(
+                "Keren TNBC preparation requires the optional 'anndata' dependency. "
+                "Install it with `pip install anndata h5py` before using the keren_tnbc source."
+            ) from exc
         input_path = self._resolve_input_file()
         adata = ad.read_h5ad(input_path)
         obs = adata.obs.copy()
+        resolved_label_column = self._resolve_label_column(obs.columns)
         var_names = [str(name) for name in adata.var_names.tolist()]
         marker_frame = pd.DataFrame(
             np.asarray(adata.X, dtype=np.float32),
@@ -52,7 +59,7 @@ class KerenTNBCH5ADAdapter:
             .str.replace(r"[^a-z0-9]+", "_", regex=True)
             .str.strip("_")
         )
-        obs["label"] = obs[self.label_column].astype(str)
+        obs["label"] = obs[resolved_label_column].astype(str)
 
         samples: dict[str, AnnData] = {}
         sample_rows: list[dict[str, object]] = []
@@ -109,10 +116,23 @@ class KerenTNBCH5ADAdapter:
             dataset_name=self.dataset_name,
             study_meta={
                 "source_file": str(input_path),
-                "label_column": "label",
+                "label_column": resolved_label_column,
                 "source_schema": "keren_tnbc_h5ad",
                 "n_marker_channels": len(var_names),
             },
+        )
+
+    def _resolve_label_column(self, columns: pd.Index) -> str:
+        requested = str(self.label_column)
+        if requested in columns:
+            return requested
+        fallback_candidates = ("subtype", "label", "Group")
+        for candidate in fallback_candidates:
+            if candidate in columns:
+                return candidate
+        raise KeyError(
+            f"Could not find a usable label column in Keren TNBC input. "
+            f"Requested '{requested}'. Available columns: {list(map(str, columns))}"
         )
 
     def _resolve_input_file(self) -> Path:
