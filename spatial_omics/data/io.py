@@ -55,7 +55,22 @@ def load_adata(path: str | Path) -> AnnData:
             raise RuntimeError("Cannot load .h5ad without the optional 'anndata' dependency.")
         from anndata import read_h5ad
 
-        return read_h5ad(path)
+        adata = read_h5ad(path)
+        try:
+            _ = adata.obs
+        except AttributeError:
+            import anndata.io as adio
+            import h5py
+
+            with h5py.File(path, "r") as f:
+                adata = AnnData(
+                    X=adio.read_elem(f["X"]) if "X" in f else None,
+                    obs=adio.read_elem(f["obs"]) if "obs" in f else pd.DataFrame(),
+                    var=adio.read_elem(f["var"]) if "var" in f else pd.DataFrame(),
+                    obsm={k: adio.read_elem(v) for k, v in f.get("obsm", {}).items()},
+                    uns={k: adio.read_elem(v) for k, v in f.get("uns", {}).items()},
+                )
+        return adata
     with path.open("rb") as fh:
         return _AliasUnpickler(fh).load()
 
