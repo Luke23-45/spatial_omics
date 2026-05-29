@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import json
 import math
 from dataclasses import dataclass, field
@@ -367,6 +368,14 @@ def build_region_examples(
     study = load_study(study_dir)
     label_map = _region_label_map(study)
     type_vocab = _type_vocabulary(study)
+    if features_path and not os.path.exists(features_path):
+        print(f"Engineered features file {features_path} not found. Extracting on the fly...")
+        from spatial_omics.features.pipeline import extract_feature_families, save_feature_table
+        from spatial_omics.config.types import FeatureConfig
+        cfg = FeatureConfig(study_dir=study_dir, output_dir=os.path.dirname(features_path))
+        feature_table = extract_feature_families(study_dir, cfg)
+        save_feature_table(feature_table, os.path.dirname(features_path))
+
     engineered_map = _prepare_engineered_feature_map(features_path)
     engineered_dim = len(next(iter(engineered_map.values()))) if engineered_map else 0
     examples: list[SpatialRegionExample] = []
