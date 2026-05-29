@@ -77,17 +77,16 @@ class GraphSAGELayer(_BaseGNNLayer):
         super().__init__()
         self.proj = nn.Sequential(
             nn.Linear(dim * 2, dim),
-            nn.GELU(),
-            nn.Linear(dim, dim),
+            nn.ReLU(),
         )
-        self.norm = nn.LayerNorm(dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, cell_state: torch.Tensor, neighbor_idx: torch.Tensor, neighbor_mask: torch.Tensor) -> torch.Tensor:
         neighbor_state, mask = self._gather_neighbors(cell_state, neighbor_idx, neighbor_mask)
         mean = (neighbor_state * mask).sum(dim=2) / mask.sum(dim=2).clamp_min(1.0)
         updated = self.proj(torch.cat([cell_state, mean], dim=-1))
-        return self.norm(cell_state + self.dropout(updated))
+        updated = self.dropout(updated)
+        return torch.nn.functional.normalize(updated, p=2.0, dim=-1)
 
 
 class GINLayer(_BaseGNNLayer):
@@ -176,7 +175,7 @@ class GNNBaselineClassifier(nn.Module):
         self.layers = nn.ModuleList([layer_factory[model_name](model_dim, dropout) for _ in range(num_layers)])
         self.dropout = nn.Dropout(dropout)
         self.readout = nn.Sequential(
-            nn.Linear(model_dim * 3 + 1, model_dim),
+            nn.Linear(model_dim * 2 + 1, model_dim),
             nn.GELU(),
             nn.Dropout(dropout),
             nn.LayerNorm(model_dim),
@@ -210,7 +209,7 @@ class GNNBaselineClassifier(nn.Module):
         pooled_max = masked_for_max.max(dim=1).values
         pooled_max = torch.where(torch.isfinite(pooled_max), pooled_max, torch.zeros_like(pooled_max))
         cell_count = mask.sum(dim=1, keepdim=True).float().log1p()
-        logits = self.readout(self.dropout(torch.cat([pooled_mean, pooled_max, pooled_mean, cell_count], dim=-1)))
+        logits = self.readout(self.dropout(torch.cat([pooled_mean, pooled_max, cell_count], dim=-1)))
         return {"logits": logits}
 
 
@@ -347,9 +346,8 @@ def _train_fold(
     if cfg.blend_with_engineered and best_engineered_model is not None:
         engineered_prob = best_engineered_model.predict_proba(test_engineered)[:, 1]
         test_prob = best_alpha * test_prob + (1.0 - best_alpha) * engineered_prob
-    # Re-optimize threshold on test predictions for fair comparison with Spatial-Z4.
-    # Threshold is a binarization cutoff, not a learned parameter.
-    test_threshold = _best_threshold(test_true, test_prob)
+    # Use validation-fitted threshold — never re-optimize on test data (hypothesis.md §Negative Control #2).
+    test_threshold = best_threshold
     test_pred = (test_prob >= test_threshold).astype(np.int64)
     test_metrics = _score_binary(test_true, test_pred, test_prob)
     test_metrics["decision_threshold"] = float(test_threshold)

@@ -27,7 +27,35 @@ from spatial_omics.models.spatial_z4 import (
 from spatial_omics.utils.io import ensure_dir
 
 
-from spatial_omics.config import TopoNetHodgeConfig
+@dataclass
+class TopoNetHodgeConfig:
+    study_dir: str
+    output_dir: str
+    features_path: str | None = None
+    random_state: int = 42
+    n_splits: int = 4
+    n_repeats: int = 1
+    split_mode: str = "grouped"
+    batch_size: int = 12
+    epochs: int = 12
+    patience: int = 4
+    learning_rate: float = 1e-3
+    weight_decay: float = 5e-5
+    knn_k: int = 6
+    neighborhood_mode: str = "adaptive_knn"
+    model_dim: int = 48
+    type_embedding_dim: int = 16
+    max_cells: int = 160
+    dropout: float = 0.15
+    focal_gamma: float = 2.0
+    label_smoothing: float = 0.0
+    threshold_grid_size: int = 61
+    num_layers: int = 2
+    polynomial_order: int = 2
+    restriction_hidden_dim: int = 32
+    global_knn_multiplier: int = 4
+    global_distance_multiplier: float = 2.5
+    global_max_neighbors: int = 24
 
 
 def _make_loader(examples: list[SpatialRegionExample], labels: np.ndarray, *, batch_size: int, shuffle: bool) -> DataLoader:
@@ -145,22 +173,9 @@ def _collate_toponet_batch(batch: list[tuple[SpatialRegionExample, int]]) -> dic
 
 
 class SimplicialHodgeLayer(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        polynomial_order: int,
-        dropout: float,
-        restriction_hidden_dim: int,
-        *,
-        use_geometric_weights: bool,
-        use_orthogonal_restrictions: bool,
-        use_morse_gating: bool,
-    ) -> None:
+    def __init__(self, dim: int, polynomial_order: int, dropout: float, restriction_hidden_dim: int) -> None:
         super().__init__()
         self.polynomial_order = polynomial_order
-        self.use_geometric_weights = use_geometric_weights
-        self.use_orthogonal_restrictions = use_orthogonal_restrictions
-        self.use_morse_gating = use_morse_gating
         self.theta0 = nn.Parameter(torch.zeros(polynomial_order + 1))
         self.theta1_down = nn.Parameter(torch.zeros(polynomial_order + 1))
         self.theta1_up = nn.Parameter(torch.zeros(polynomial_order + 1))
@@ -251,11 +266,8 @@ class SimplicialHodgeLayer(nn.Module):
         return reflected
 
     def _restricted_message(self, source: torch.Tensor, target: torch.Tensor, restrictor: nn.Module, projector: nn.Module) -> torch.Tensor:
-        if self.use_orthogonal_restrictions:
-            reflected = self._orthogonal_restrict(source, target, restrictor)
-            return projector(reflected)
-        gate = torch.softmax(restrictor(torch.cat([source, target], dim=-1)), dim=-1)
-        return gate * projector(source)
+        reflected = self._orthogonal_restrict(source, target, restrictor)
+        return projector(reflected)
 
     def _approx_harmonic_projection(
         self,
@@ -301,21 +313,25 @@ class SimplicialHodgeLayer(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         b1_t = b1.transpose(1, 2)
         b2_t = b2.transpose(1, 2)
-        if self.use_geometric_weights:
-            weighted_b1 = b1 * edge_weight.unsqueeze(1)
-            l0 = torch.bmm(weighted_b1, b1_t)
-            node_volume = torch.bmm(b1.abs(), edge_weight.unsqueeze(-1)).squeeze(-1).clamp_min(1e-6)
-            inv_node_volume_b1 = b1 * node_volume.reciprocal().unsqueeze(-1)
-            l1_down = torch.bmm(b1_t, inv_node_volume_b1)
-            weighted_b2 = b2 * triangle_weight.unsqueeze(1)
-            l1_up = torch.bmm(weighted_b2, b2_t)
-            inv_edge_weight_b2 = b2 * edge_weight.reciprocal().unsqueeze(-1)
-            l2 = torch.bmm(b2_t, inv_edge_weight_b2)
-        else:
-            l0 = torch.bmm(b1, b1_t)
-            l1_down = torch.bmm(b1_t, b1)
-            l1_up = torch.bmm(b2, b2_t)
-            l2 = torch.bmm(b2_t, b2)
+        weighted_b1 = b1 * edge_weight.unsqueeze(1)
+        l0 = torch.bmm(weighted_b1, b1_t)
+        node_volume = torch.bmm(b1.abs(), edge_weight.unsqueeze(-1)).squeeze(-1).clamp_min(1e-6)
+        inv_node_volume_b1 = b1 * node_volume.reciprocal().unsqueeze(-1)
+        l1_down = torch.bmm(b1_t, inv_node_volume_b1)
+        weighted_b2 = b2 * triangle_weight.unsqueeze(1)
+        l1_up = torch.bmm(weighted_b2, b2_t)
+        inv_edge_weight_b2 = b2 * edge_weight.reciprocal().unsqueeze(-1)
+        l2 = torch.bmm(b2_t, inv_edge_weight_b2)
+
+        d0 = l0.diagonal(dim1=-2, dim2=-1).abs().clamp_min(1e-6).rsqrt()
+        l0 = l0 * d0.unsqueeze(-1) * d0.unsqueeze(-2)
+        d1_up = l1_up.diagonal(dim1=-2, dim2=-1).abs().clamp_min(1e-6).rsqrt()
+        l1_up = l1_up * d1_up.unsqueeze(-1) * d1_up.unsqueeze(-2)
+        d2 = l2.abs().sum(dim=-1).clamp_min(1e-6).rsqrt()
+        l2 = l2 * d2.unsqueeze(-1) * d2.unsqueeze(-2)
+        # L1_down is a signed operator; normalize by absolute-degree to bound eigenvalues
+        d1_down = l1_down.abs().sum(dim=-1).clamp_min(1e-6).rsqrt()
+        l1_down = l1_down * d1_down.unsqueeze(-1) * d1_down.unsqueeze(-2)
 
         pos_b1 = (b1 > 0).float().transpose(1, 2)
         neg_b1 = (b1 < 0).float().transpose(1, 2)
@@ -339,11 +355,10 @@ class SimplicialHodgeLayer(nn.Module):
 
         triangle_avg = self._masked_average(abs_b2, triangle_state)
         curl_message = self._restricted_message(triangle_avg, edge_state, self.triangle_restrict, self.triangle_to_edge_proj)
-        if self.use_morse_gating:
-            edge_gate = torch.sigmoid(self.edge_score(torch.cat([src_nodes, dst_nodes], dim=-1))) * edge_mask.unsqueeze(-1).float()
-            triangle_gate = torch.sigmoid(self.triangle_score(torch.cat([triangle_avg, edge_state], dim=-1))) * edge_mask.unsqueeze(-1).float()
-            grad_message = grad_message * edge_gate
-            curl_message = curl_message * triangle_gate
+        edge_gate = torch.sigmoid(self.edge_score(torch.cat([src_nodes, dst_nodes], dim=-1))) * edge_mask.unsqueeze(-1).float()
+        triangle_gate = torch.sigmoid(self.triangle_score(torch.cat([triangle_avg, edge_state], dim=-1))) * edge_mask.unsqueeze(-1).float()
+        grad_message = grad_message * edge_gate
+        curl_message = curl_message * triangle_gate
 
         edge_diffusion = self.edge_self(self._poly_apply(l1_down, edge_state, self.theta1_down) + self._poly_apply(l1_up, edge_state, self.theta1_up))
         grad_component, curl_component, harmonic_component = self._approx_harmonic_projection(
@@ -372,7 +387,8 @@ class SimplicialHodgeLayer(nn.Module):
 
         tri_from_edges = self._masked_average(abs_b2_t, edge_state)
         triangle_message = self._restricted_message(tri_from_edges, triangle_state, self.edge_triangle_restrict, self.edge_to_triangle_proj)
-        triangle_update = self.triangle_self(self._poly_apply(l2, triangle_state, self.theta2)) + triangle_message
+        triangle_importance = torch.sigmoid(self.triangle_score(torch.cat([tri_from_edges, triangle_state], dim=-1))) * triangle_mask.unsqueeze(-1).float()
+        triangle_update = self.triangle_self(self._poly_apply(l2, triangle_state, self.theta2)) + triangle_importance * triangle_message
         triangle_state = self.triangle_norm(triangle_state + self.dropout(self.activation(triangle_update)))
         triangle_state = triangle_state * triangle_mask.unsqueeze(-1).float()
         return node_state, edge_state, triangle_state, harmonic_component
@@ -390,9 +406,6 @@ class TopoNetHodgeClassifier(nn.Module):
         polynomial_order: int,
         restriction_hidden_dim: int,
         dropout: float,
-        use_geometric_weights: bool,
-        use_orthogonal_restrictions: bool,
-        use_morse_gating: bool,
     ) -> None:
         super().__init__()
         self.type_embedding = nn.Embedding(num_types + 1, type_embedding_dim)
@@ -416,9 +429,6 @@ class TopoNetHodgeClassifier(nn.Module):
                     polynomial_order=polynomial_order,
                     dropout=dropout,
                     restriction_hidden_dim=restriction_hidden_dim,
-                    use_geometric_weights=use_geometric_weights,
-                    use_orthogonal_restrictions=use_orthogonal_restrictions,
-                    use_morse_gating=use_morse_gating,
                 )
                 for _ in range(max(1, num_layers))
             ]
@@ -467,20 +477,18 @@ class TopoNetHodgeClassifier(nn.Module):
         )
         node_state = node_state * node_mask.unsqueeze(-1).float()
 
-        edge_state = torch.zeros(
-            batch["B1"].shape[0],
-            batch["B1"].shape[2],
-            node_state.shape[-1],
-            dtype=node_state.dtype,
-            device=node_state.device,
-        )
-        triangle_state = torch.zeros(
-            batch["B2"].shape[0],
-            batch["B2"].shape[2],
-            node_state.shape[-1],
-            dtype=node_state.dtype,
-            device=node_state.device,
-        )
+        pos_b1 = (batch["B1"] > 0).float().transpose(1, 2)
+        neg_b1 = (batch["B1"] < 0).float().transpose(1, 2)
+        abs_b2_t = batch["B2"].abs().transpose(1, 2)
+        src_nodes = torch.bmm(neg_b1, node_state)
+        dst_nodes = torch.bmm(pos_b1, node_state)
+        edge_seed = 0.5 * (src_nodes + dst_nodes)
+        edge_seed_gate = torch.sigmoid(self.layers[0].edge_score(torch.cat([src_nodes, dst_nodes], dim=-1)))
+        edge_state = edge_seed * edge_seed_gate * edge_mask.unsqueeze(-1).float()
+        triangle_seed = torch.bmm(abs_b2_t, edge_state) / abs_b2_t.sum(dim=-1, keepdim=True).clamp_min(1.0)
+        tri_src = torch.bmm(abs_b2_t, src_nodes) / abs_b2_t.sum(dim=-1, keepdim=True).clamp_min(1.0)
+        triangle_seed_gate = torch.sigmoid(self.layers[0].triangle_score(torch.cat([triangle_seed, tri_src], dim=-1)))
+        triangle_state = triangle_seed * triangle_seed_gate * triangle_mask.unsqueeze(-1).float()
         harmonic_state = torch.zeros_like(edge_state)
 
         for layer in self.layers:
@@ -586,9 +594,6 @@ def _train_fold(
         polynomial_order=cfg.polynomial_order,
         restriction_hidden_dim=cfg.restriction_hidden_dim,
         dropout=cfg.dropout,
-        use_geometric_weights=cfg.use_geometric_weights,
-        use_orthogonal_restrictions=cfg.use_orthogonal_restrictions,
-        use_morse_gating=cfg.use_morse_gating,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
     class_counts = np.bincount(train_labels, minlength=2).astype(np.float32)
@@ -643,7 +648,7 @@ def _train_fold(
     except ValueError:
         raw_auroc, cal_auroc = 0.5, 0.5
     test_prob = cal_prob if cal_auroc >= raw_auroc - 0.01 else raw_prob
-    test_threshold = _best_threshold(test_true, test_prob)
+    test_threshold = best_threshold
     test_pred = (test_prob >= test_threshold).astype(np.int64)
     metrics = _score_binary(test_true, test_pred, test_prob)
     metrics["decision_threshold"] = float(test_threshold)
