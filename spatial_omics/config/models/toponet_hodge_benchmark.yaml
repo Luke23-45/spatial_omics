@@ -17,6 +17,7 @@ dropout: 0.15
 focal_gamma: 2.0
 label_smoothing: 0.0
 threshold_grid_size: 61
+blend_with_engineered: true
 num_layers: 2
 polynomial_order: 2
 restriction_hidden_dim: 32

@@ -16,7 +16,9 @@ from spatial_omics.models.spatial_z4 import (
     RegionDataset,
     SpatialRegionExample,
     _apply_platt_scaling,
+    _best_blend,
     _best_threshold,
+    _build_engineered_logistic,
     _choose_validation_indices,
     _collate_batch,
     _focal_loss,
@@ -56,6 +58,7 @@ class TopoNetHodgeConfig:
     global_knn_multiplier: int = 4
     global_distance_multiplier: float = 2.5
     global_max_neighbors: int = 24
+    blend_with_engineered: bool = False
 
 
 def _make_loader(examples: list[SpatialRegionExample], labels: np.ndarray, *, batch_size: int, shuffle: bool) -> DataLoader:
@@ -600,8 +603,14 @@ def _train_fold(
     class_weight = class_counts.sum() / np.clip(class_counts, 1.0, None)
     loss_weight = torch.tensor(class_weight, dtype=torch.float32, device=device)
 
+    train_engineered = np.stack([examples[idx].engineered_features for idx in train_idx], axis=0)
+    val_engineered = np.stack([examples[idx].engineered_features for idx in val_idx], axis=0) if len(val_idx) else np.zeros((0, 0), dtype=np.float32)
+    test_engineered = np.stack([examples[idx].engineered_features for idx in test_idx], axis=0)
+
     best_state = copy.deepcopy(model.state_dict())
     best_threshold = 0.5
+    best_alpha = 1.0
+    best_engineered_model = None
     best_platt = (1.0, 0.0)
     best_score = -np.inf
     patience_counter = 0
@@ -624,6 +633,14 @@ def _train_fold(
         platt_A, platt_B = _fit_platt_scaling(val_logits, val_true)
         val_prob = _apply_platt_scaling(val_logits, platt_A, platt_B)
         threshold = _best_threshold(val_true, val_prob)
+        alpha = 1.0
+        engineered_model = None
+        if cfg.blend_with_engineered and val_engineered.shape[1] > 0 and np.unique(train_labels).shape[0] >= 2:
+            engineered_model = _build_engineered_logistic(seed)
+            engineered_model.fit(train_engineered, train_labels)
+            engineered_prob = engineered_model.predict_proba(val_engineered)[:, 1]
+            alpha, threshold = _best_blend(val_true, val_prob, engineered_prob)
+            val_prob = alpha * val_prob + (1.0 - alpha) * engineered_prob
         val_pred = (val_prob >= threshold).astype(np.int64)
         val_metrics = _score_binary(val_true, val_pred, val_prob)
         score = 0.65 * val_metrics["balanced_accuracy"] + 0.35 * val_metrics["auroc"]
@@ -631,6 +648,8 @@ def _train_fold(
             best_score = score
             best_state = copy.deepcopy(model.state_dict())
             best_threshold = float(threshold)
+            best_alpha = float(alpha)
+            best_engineered_model = copy.deepcopy(engineered_model)
             best_platt = (platt_A, platt_B)
             patience_counter = 0
         else:
@@ -648,11 +667,14 @@ def _train_fold(
     except ValueError:
         raw_auroc, cal_auroc = 0.5, 0.5
     test_prob = cal_prob if cal_auroc >= raw_auroc - 0.01 else raw_prob
+    if cfg.blend_with_engineered and best_engineered_model is not None:
+        engineered_prob = best_engineered_model.predict_proba(test_engineered)[:, 1]
+        test_prob = best_alpha * test_prob + (1.0 - best_alpha) * engineered_prob
     test_threshold = best_threshold
     test_pred = (test_prob >= test_threshold).astype(np.int64)
     metrics = _score_binary(test_true, test_pred, test_prob)
     metrics["decision_threshold"] = float(test_threshold)
-    metrics["blend_alpha"] = 1.0
+    metrics["blend_alpha"] = float(best_alpha)
     return metrics, model
 
 
