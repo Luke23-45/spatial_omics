@@ -1,6 +1,6 @@
 study_dir: data/spatial_omics/prepared/cellsighter_crc_clinical
 output_dir: outputs/active/toponet_hodge_crc
-features_path: null
+features_path: outputs/active/features/feature_table.csv
 n_splits: 4
 n_repeats: 1
 epochs: 12
