@@ -80,6 +80,7 @@ class TopoNetHodgeConfig:
     global_knn_multiplier: int = 4
     global_distance_multiplier: float = 2.5
     global_max_neighbors: int = 24
+    blend_with_engineered: bool = False
 
 
 @dataclass
